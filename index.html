@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通用型 API to Excel/CSV 轉換器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .hidden { display: none !important; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6; color: #333; max-width: 1400px;
+            margin: 0 auto; padding: 20px; background-color: #f4f7f6;
+        }
+
+        /* 標題區 */
+        .header-container { text-align: center; margin-bottom: 20px; }
+        h1 { color: #2c3e50; margin: 0; }
+        p { color: #666; margin-top: 5px; }
+        
+        /* API 輸入控制區 */
+        #api-input-area {
+            background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; border: 1px solid #e1e4e8;
+        }
+
+        .input-group { display: flex; gap: 10px; width: 100%; }
+        #api-url { 
+            flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 16px; outline: none; transition: border-color 0.3s;
+        }
+        #api-url:focus { border-color: #3498db; }
+        
+        #fetch-btn {
+            padding: 10px 30px; font-size: 16px; color: #fff; background-color: #0366d6; 
+            border: none; border-radius: 6px; cursor: pointer; transition: background 0.3s; font-weight: bold; white-space: nowrap;
+        }
+        #fetch-btn:hover { background-color: #0255b3; }
+        #fetch-btn:disabled { background-color: #ccc; cursor: not-allowed; }
+
+        .options-group { display: flex; align-items: center; gap: 20px; font-size: 14px; color: #555; }
+        .checkbox-label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+        
+        /* 錯誤訊息 */
+        #error-box { background: #fee; color: #c00; padding: 10px; border-radius: 5px; border: 1px solid #fcc; margin-top: 10px; }
+
+        /* 讀取動畫 */
+        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 20px; }
+        .spinner { border: 6px solid #f3f3f3; border-top: 6px solid #3498db; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* 內容區塊 */
+        .content-box { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        h2 { color: #2c3e50; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; margin-top: 0; font-size: 1.2em; }
+
+        /* 篩選器樣式 */
+        #filter-container { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+        .filter-control label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.85em; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .filter-control select { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; background: #f9f9f9; }
+
+        /* 表格與操作區 */
+        .table-actions-container { display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0; align-items: center; justify-content: space-between; }
+        .search-box { display: flex; gap: 10px; flex: 1; min-width: 300px; }
+        #table-search-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        
+        .export-buttons-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .export-buttons-group button {
+            padding: 8px 15px; font-size: 0.9em; color: #fff; border: none; border-radius: 4px; 
+            cursor: pointer; transition: opacity 0.2s;
+        }
+        .export-buttons-group button:hover { opacity: 0.9; }
+        .export-buttons-group button:disabled { background-color: #ccc !important; cursor: not-allowed; }
+
+        #export-excel-btn { background-color: #217346; }
+        #export-csv-btn { background-color: #f39c12; }
+        #export-json-btn { background-color: #5b62f4; }
+        #export-xml-btn { background-color: #8e44ad; }
+
+        /* 表格本體 */
+        .table-wrapper { overflow-x: auto; border: 1px solid #eee; border-radius: 5px; max-height: 70vh; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; font-size: 14px; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top; max-width: 300px; word-wrap: break-word; }
+        th { background-color: #f8f9fa; font-weight: 600; color: #333; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #ddd; white-space: nowrap; }
+        tr:hover { background-color: #f1f1f1; }
+        th.sortable { cursor: pointer; user-select: none; }
+        th.sort-asc::after { content: ' ▲'; color: #007bff; }
+        th.sort-desc::after { content: ' ▼'; color: #007bff; }
+    </style>
+</head>
+<body>
+
+    <div id="loader" class="hidden">
+        <div class="spinner"></div>
+        <p>資料處理中，請稍候...</p>
+    </div>
+
+    <div class="header-container">
+        <h1>🔗 通用型 API 資料轉換器</h1>
+        <p>貼上任一回傳 JSON 的網址，自動轉為可篩選表格並匯出</p>
+    </div>
+    
+    <div id="api-input-area">
+        <div class="input-group">
+            <input type="text" id="api-url" placeholder="請貼上 API 網址 (例如: https://api.fda.gov/food/enforcement.json?limit=10)">
+            <button id="fetch-btn">抓取資料</button>
+        </div>
+        <div class="options-group">
+            <label class="checkbox-label" title="若遇到跨域(CORS)錯誤，請勾選此項嘗試繞過">
+                <input type="checkbox" id="cors-proxy"> 
+                使用 CORS Proxy (解決跨域被擋問題)
+            </label>
+            <span style="color:#999; font-size:0.9em;">(提示：若抓不到資料，請勾選 Proxy 再試一次)</span>
+        </div>
+        <div id="error-box" class="hidden"></div>
+    </div>
+
+    <div id="main-content" class="hidden">
+        
+        <div class="content-box">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h2>欄位篩選器</h2>
+                <button onclick="resetFilters()" style="font-size:0.85em; padding:5px 10px; cursor:pointer;">重置篩選</button>
+            </div>
+            <div id="filter-container"></div>
+        </div>
+
+        <div class="content-box">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h2>資料預覽</h2>
+                <span id="data-stats" style="font-size:0.9em; color:#666;"></span>
+            </div>
+
+            <div class="table-actions-container">
+                <div class="search-box">
+                    <input type="text" id="table-search-input" placeholder="搜尋關鍵字...">
+                </div>
+                <div class="export-buttons-group">
+                    <button id="export-excel-btn">Excel</button>
+                    <button id="export-csv-btn">CSV</button>
+                    <button id="export-json-btn">JSON</button>
+                    <button id="export-xml-btn">XML</button>
+                </div>
+            </div>
+
+            <div class="table-wrapper">
+                <div id="table-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM 元素
+            const loader = document.getElementById('loader');
+            const mainContent = document.getElementById('main-content');
+            const errorBox = document.getElementById('error-box');
+            const filterContainer = document.getElementById('filter-container');
+            const tableContainer = document.getElementById('table-container');
+            const tableSearchInput = document.getElementById('table-search-input');
+            const dataStats = document.getElementById('data-stats');
+            const apiUrlInput = document.getElementById('api-url');
+            const corsProxyCheckbox = document.getElementById('cors-proxy');
+            
+            // 按鈕
+            const fetchBtn = document.getElementById('fetch-btn');
+            const exportBtns = {
+                excel: document.getElementById('export-excel-btn'),
+                csv: document.getElementById('export-csv-btn'),
+                json: document.getElementById('export-json-btn'),
+                xml: document.getElementById('export-xml-btn')
+            };
+
+            // 狀態變數
+            let originalData = [];
+            let currentViewData = [];
+            let headers = [];
+            let sortState = { column: null, direction: 'none' };
+
+            // 1. 綁定按鈕事件
+            fetchBtn.addEventListener('click', () => {
+                const url = apiUrlInput.value.trim();
+                if (!url) {
+                    showError("請輸入有效的網址！");
+                    return;
+                }
+                fetchApiData(url);
+            });
+
+            // 按下 Enter 也可以搜尋
+            apiUrlInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') fetchBtn.click();
+            });
+
+            // 2. 核心 Fetch 邏輯
+            async function fetchApiData(url) {
+                showLoader(true);
+                showError(null); // 清除錯誤
+                mainContent.classList.add('hidden');
+
+                // 處理 CORS Proxy
+                let targetUrl = url;
+                if (corsProxyCheckbox.checked) {
+                    // 使用 AllOrigins 作為 Proxy
+                    targetUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                }
+
+                try {
+                    const response = await fetch(targetUrl);
+                    if (!response.ok) throw new Error(`連線失敗 (HTTP ${response.status})`);
+                    
+                    const rawData = await response.json();
+                    
+                    // 3. 智慧解析：尋找 JSON 中真正的「資料陣列」
+                    const dataArray = findDataArray(rawData);
+
+                    if (!dataArray || dataArray.length === 0) {
+                        throw new Error("成功連線，但在回應中找不到陣列格式的資料。請確認該 API 是否回傳列表資料。");
+                    }
+
+                    // 4. 資料扁平化處理 (讓巢狀物件變成可顯示的單層欄位)
+                    originalData = dataArray.map(item => flattenObject(item));
+                    
+                    // 初始化表格
+                    initTableUI();
+
+                } catch (error) {
+                    console.error(error);
+                    let msg = error.message;
+                    if (msg.includes("Failed to fetch")) {
+                        msg = "連線被拒絕。這通常是因為跨域(CORS)限制。<br>請嘗試勾選上方的 <b>「使用 CORS Proxy」</b> 選項再試一次。";
+                    }
+                    showError(msg);
+                } finally {
+                    showLoader(false);
+                }
+            }
+
+            // --- 輔助邏輯：智慧尋找陣列 ---
+            function findDataArray(obj) {
+                if (Array.isArray(obj)) return obj;
+                if (typeof obj !== 'object' || obj === null) return null;
+
+                // 常見的 API 欄位名稱優先級
+                const commonKeys = ['results', 'data', 'items', 'records', 'rows', 'list'];
+                for (const key of commonKeys) {
+                    if (Array.isArray(obj[key])) return obj[key];
+                }
+
+                // 若沒對中常見名稱，則搜尋第一個是陣列的 value
+                for (const key in obj) {
+                    if (Array.isArray(obj[key])) return obj[key];
+                }
+                
+                return null;
+            }
+
+            // --- 輔助邏輯：物件扁平化 (簡單版) ---
+            // 將 { user: { name: "A", id: 1 } } 轉為 { "user.name": "A", "user.id": 1 }
+            function flattenObject(obj, prefix = '', result = {}) {
+                for (const key in obj) {
+                    if (obj.hasOwnProperty(key)) {
+                        const newKey = prefix ? `${prefix}.${key}` : key;
+                        const value = obj[key];
+
+                        if (value && typeof value === 'object' && !Array.isArray(value)) {
+                            flattenObject(value, newKey, result);
+                        } else if (Array.isArray(value)) {
+                            // 陣列直接轉字串顯示，不深度展開以免表格太亂
+                            result[newKey] = JSON.stringify(value);
+                        } else {
+                            result[newKey] = value;
+                        }
+                    }
+                }
+                return result;
+            }
+
+            // --- UI 初始化 ---
+            function initTableUI() {
+                if (originalData.length === 0) return;
+
+                // 偵測所有欄位
+                const keySet = new Set();
+                // 掃描前 20 筆資料來收集所有可能的欄位
+                originalData.slice(0, 20).forEach(row => {
+                    Object.keys(row).forEach(k => keySet.add(k));
+                });
+                headers = Array.from(keySet).sort();
+
+                renderFilters();
+                updateView();
+                mainContent.classList.remove('hidden');
+            }
+
+            // --- 渲染篩選器 ---
+            function renderFilters() {
+                filterContainer.innerHTML = '';
+                
+                // 為了避免欄位太多篩選器爆炸，只選取「重複值較多」的欄位當篩選器
+                // 邏輯：如果一個欄位的唯一值數量 < 資料總數的 20%，則適合當分類篩選
+                const suitableFilters = headers.filter(header => {
+                    const uniqueCount = new Set(originalData.map(item => item[header])).size;
+                    return uniqueCount > 1 && uniqueCount < 50 && uniqueCount < originalData.length * 0.5;
+                });
+
+                if (suitableFilters.length === 0) {
+                     filterContainer.innerHTML = '<p style="color:#888; grid-column: 1/-1;">自動偵測：無適合建立下拉選單的分類欄位 (所有欄位值差異過大)。</p>';
+                }
+
+                suitableFilters.forEach(header => {
+                    const uniqueValues = [...new Set(originalData.map(item => item[header]))]
+                        .filter(v => v != null && v !== "")
+                        .sort();
+
+                    const control = document.createElement('div');
+                    control.className = 'filter-control';
+                    control.innerHTML = `
+                        <label title="${header}">${header}</label>
+                        <select data-column="${header}">
+                            <option value="">(全部)</option>
+                            ${uniqueValues.map(v => `<option value="${escapeHtml(String(v))}">${escapeHtml(String(v))}</option>`).join('')}
+                        </select>
+                    `;
+                    control.querySelector('select').addEventListener('change', updateView);
+                    filterContainer.appendChild(control);
+                });
+            }
+
+            window.resetFilters = function() {
+                document.querySelectorAll('#filter-container select').forEach(sel => sel.value = "");
+                tableSearchInput.value = "";
+                updateView();
+            }
+
+            // --- 更新視圖 ---
+            function updateView() {
+                let filteredData = [...originalData];
+
+                // 篩選
+                document.querySelectorAll('#filter-container select').forEach(select => {
+                    if (select.value !== "") {
+                        const column = select.dataset.column;
+                        filteredData = filteredData.filter(row => String(row[column]) === select.value);
+                    }
+                });
+
+                // 搜尋
+                const searchTerm = tableSearchInput.value.toLowerCase().trim();
+                if (searchTerm) {
+                    filteredData = filteredData.filter(row => 
+                        Object.values(row).some(val => String(val).toLowerCase().includes(searchTerm))
+                    );
+                }
+
+                currentViewData = filteredData;
+                applySort();
+                renderTable();
+                updateExportButtons();
+                dataStats.textContent = `顯示 ${currentViewData.length} / ${originalData.length} 筆`;
+            }
+
+            tableSearchInput.addEventListener('input', updateView);
+
+            // --- 排序 ---
+            function handleSort(column) {
+                if (sortState.column === column) {
+                    sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                    sortState.column = column;
+                    sortState.direction = 'asc';
+                }
+                updateView();
+            }
+
+            function applySort() {
+                const { column, direction } = sortState;
+                if (!column) return;
+                
+                currentViewData.sort((a, b) => {
+                    const valA = a[column] || "";
+                    const valB = b[column] || "";
+                    // 嘗試數值排序
+                    const numA = parseFloat(valA);
+                    const numB = parseFloat(valB);
+                    if (!isNaN(numA) && !isNaN(numB)) {
+                        return direction === 'asc' ? numA - numB : numB - numA;
+                    }
+                    // 字串排序
+                    return direction === 'asc' 
+                        ? String(valA).localeCompare(String(valB)) 
+                        : String(valB).localeCompare(String(valA));
+                });
+            }
+
+            // --- 渲染表格 ---
+            function renderTable() {
+                tableContainer.innerHTML = '';
+                if (currentViewData.length === 0) {
+                    tableContainer.innerHTML = '<p style="text-align:center; padding:20px; color:#666;">無資料顯示。</p>';
+                    return;
+                }
+
+                const table = document.createElement('table');
+                
+                // 表頭
+                const thead = table.createTHead();
+                const headerRow = thead.insertRow();
+                headers.forEach(header => {
+                    const th = document.createElement('th');
+                    th.className = 'sortable';
+                    th.textContent = header;
+                    if (sortState.column === header) th.classList.add(`sort-${sortState.direction}`);
+                    th.addEventListener('click', () => handleSort(header));
+                    headerRow.appendChild(th);
+                });
+
+                // 內容 (限制渲染 500 筆以免卡頓)
+                const tbody = table.createTBody();
+                const dataToRender = currentViewData.slice(0, 500); 
+
+                dataToRender.forEach(rowObject => {
+                    const row = tbody.insertRow();
+                    headers.forEach(header => {
+                        const cell = row.insertCell();
+                        let val = rowObject[header];
+                        cell.textContent = val != null ? val : "";
+                    });
+                });
+                
+                if (currentViewData.length > 500) {
+                    const infoRow = tbody.insertRow();
+                    const cell = infoRow.insertCell();
+                    cell.colSpan = headers.length;
+                    cell.style.textAlign = 'center';
+                    cell.style.color = '#888';
+                    cell.style.padding = '15px';
+                    cell.textContent = `( ⚠️ 僅顯示前 500 筆預覽，完整 ${currentViewData.length} 筆資料請使用匯出功能下載 )`;
+                }
+
+                tableContainer.appendChild(table);
+            }
+
+            // --- 匯出功能 ---
+            function updateExportButtons() {
+                const disabled = currentViewData.length === 0;
+                Object.values(exportBtns).forEach(btn => btn.disabled = disabled);
+            }
+
+            // Excel
+            exportBtns.excel.addEventListener('click', () => {
+                const ws = XLSX.utils.json_to_sheet(currentViewData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "API_Data");
+                XLSX.writeFile(wb, `api_export_${getTodayStr()}.xlsx`);
+            });
+
+            // CSV
+            exportBtns.csv.addEventListener('click', () => {
+                const csvContent = [
+                    headers.join(','), 
+                    ...currentViewData.map(row => headers.map(header => {
+                        let val = row[header] == null ? '' : String(row[header]);
+                        if (val.includes(',') || val.includes('"') || val.includes('\n')) val = `"${val.replace(/"/g, '""')}"`;
+                        return val;
+                    }).join(','))
+                ].join('\n');
+                downloadFile(csvContent, `api_export_${getTodayStr()}.csv`, 'text/csv');
+            });
+
+            // JSON
+            exportBtns.json.addEventListener('click', () => {
+                downloadFile(JSON.stringify(currentViewData, null, 2), `api_export_${getTodayStr()}.json`, 'application/json');
+            });
+
+            // XML
+            exportBtns.xml.addEventListener('click', () => {
+                let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<data>\n';
+                currentViewData.forEach((row, i) => {
+                    xml += `  <item id="${i+1}">\n`;
+                    headers.forEach(h => {
+                        const tag = h.replace(/[^a-zA-Z0-9_]/g, '_'); 
+                        xml += `    <${tag}>${escapeHtml(String(row[h]||''))}</${tag}>\n`;
+                    });
+                    xml += `  </item>\n`;
+                });
+                xml += '</data>';
+                downloadFile(xml, `api_export_${getTodayStr()}.xml`, 'application/xml');
+            });
+
+            // 工具函式
+            function showLoader(show) { show ? loader.classList.remove('hidden') : loader.classList.add('hidden'); }
+            function showError(msg) { 
+                if(!msg) { errorBox.classList.add('hidden'); return; }
+                errorBox.innerHTML = msg; 
+                errorBox.classList.remove('hidden'); 
+            }
+            function escapeHtml(text) { return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
+            function getTodayStr() { return new Date().toISOString().slice(0,10); }
+            function downloadFile(content, fileName, mimeType) {
+                const blob = new Blob([content], { type: mimeType + ';charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            }
+        });
+    </script>
+</body>
+</html>
