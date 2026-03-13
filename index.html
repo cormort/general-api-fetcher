@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>通用型 API 資料轉換器 V2.2（優化版）</title>
+  <title>通用型 API 資料轉換器 V3.0（TFDA優化版）</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root {
@@ -17,8 +17,8 @@
       --danger: #c0392b;
       --text: #333;
       --muted: #666;
-      --shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
-      --radius: 10px;
+      --shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      --radius: 12px;
     }
 
     * { box-sizing: border-box; }
@@ -27,7 +27,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       line-height: 1.6;
       color: var(--text);
-      max-width: 1400px;
+      max-width: 1440px;
       margin: 0 auto;
       padding: 20px;
       background-color: var(--bg);
@@ -43,6 +43,12 @@
     h1 {
       color: #2c3e50;
       margin: 0;
+      font-size: 2rem;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-top: 8px;
     }
 
     #api-input-area {
@@ -67,10 +73,10 @@
       flex: 1;
       padding: 12px;
       border: 2px solid #ddd;
-      border-radius: 6px;
-      font-size: 16px;
+      border-radius: 8px;
+      font-size: 15px;
       outline: none;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
     #api-url:focus {
@@ -79,13 +85,13 @@
 
     button {
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
       transition: 0.2s ease;
     }
 
     #fetch-btn {
-      padding: 10px 30px;
+      padding: 10px 28px;
       font-size: 16px;
       color: #fff;
       background-color: var(--primary);
@@ -102,6 +108,33 @@
       cursor: wait;
     }
 
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .quick-btn {
+      padding: 7px 12px;
+      background: #eef4ff;
+      color: #1f4f9a;
+      border: 1px solid #d8e5ff;
+      font-size: 0.9rem;
+    }
+
+    .quick-btn:hover {
+      background: #dfeeff;
+    }
+
+    .tip-box {
+      background: #f8f9fa;
+      border: 1px solid #eceff1;
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: #555;
+      font-size: 0.92rem;
+    }
+
     .status-bar {
       font-size: 0.95em;
       color: var(--muted);
@@ -110,7 +143,7 @@
       gap: 10px;
       background: #f8f9fa;
       padding: 10px 12px;
-      border-radius: 6px;
+      border-radius: 8px;
       border: 1px solid #eee;
       flex-wrap: wrap;
     }
@@ -118,9 +151,9 @@
     .proxy-badge {
       background: #3498db;
       color: white;
-      padding: 2px 8px;
+      padding: 2px 10px;
       border-radius: 999px;
-      font-size: 0.85em;
+      font-size: 0.82em;
       font-weight: 600;
     }
 
@@ -128,23 +161,21 @@
       background: #fff2f2;
       color: #b42318;
       padding: 15px;
-      border-radius: 6px;
+      border-radius: 8px;
       border: 1px solid #fecaca;
-      margin-top: 6px;
       white-space: pre-wrap;
     }
 
     #debug-box {
-      background: #2d2d2d;
+      background: #1f2328;
       color: #f8f8f2;
       padding: 15px;
-      border-radius: 6px;
-      margin-top: 6px;
+      border-radius: 8px;
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       overflow-x: auto;
-      max-height: 320px;
+      max-height: 340px;
       font-size: 0.9em;
-      border: 1px solid #444;
+      border: 1px solid #30363d;
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -152,8 +183,8 @@
     .content-box {
       background-color: #fff;
       padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
       margin-bottom: 20px;
       border: 1px solid #eee;
     }
@@ -167,7 +198,7 @@
     }
 
     .count-badge {
-      font-size: 0.7em;
+      font-size: 0.72em;
       background: #eee;
       padding: 2px 8px;
       border-radius: 999px;
@@ -176,7 +207,7 @@
 
     .secondary-btn {
       padding: 6px 12px;
-      font-size: 0.85em;
+      font-size: 0.86em;
       cursor: pointer;
       background: #f3f4f6;
       color: #333;
@@ -207,7 +238,7 @@
       width: 100%;
       padding: 10px;
       border: 1px solid #ccc;
-      border-radius: 4px;
+      border-radius: 6px;
     }
 
     .export-buttons-group {
@@ -218,9 +249,9 @@
 
     .export-buttons-group button {
       padding: 8px 15px;
-      font-size: 0.9em;
+      font-size: 0.92em;
       color: #fff;
-      border-radius: 4px;
+      border-radius: 6px;
     }
 
     .export-buttons-group button:hover {
@@ -240,7 +271,7 @@
     .table-wrapper {
       overflow: auto;
       border: 1px solid #eee;
-      border-radius: 5px;
+      border-radius: 6px;
       max-height: 70vh;
       background: #fff;
     }
@@ -248,7 +279,7 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 800px;
+      min-width: 900px;
       font-size: 14px;
     }
 
@@ -257,7 +288,7 @@
       text-align: left;
       border-bottom: 1px solid #ddd;
       vertical-align: top;
-      max-width: 300px;
+      max-width: 320px;
       word-wrap: break-word;
       word-break: break-word;
     }
@@ -296,8 +327,8 @@
       border: 5px solid #f3f3f3;
       border-top: 5px solid #3498db;
       border-radius: 50%;
-      width: 40px;
-      height: 40px;
+      width: 42px;
+      height: 42px;
       animation: spin 1s linear infinite;
     }
 
@@ -306,9 +337,10 @@
       100% { transform: rotate(360deg); }
     }
 
-    .muted {
-      color: var(--muted);
-      font-size: 0.9em;
+    .section-title {
+      margin: 0 0 10px 0;
+      color: #2c3e50;
+      font-size: 1.1rem;
     }
 
     @media (max-width: 768px) {
@@ -318,6 +350,10 @@
 
       #fetch-btn {
         width: 100%;
+      }
+
+      .quick-actions {
+        flex-direction: column;
       }
     }
   </style>
@@ -329,8 +365,8 @@
   </div>
 
   <div class="header-container">
-    <h1>🔗 通用型 API 資料轉換器 V2.2（優化版）</h1>
-    <p>內建 JSON 結構透視、智慧找陣列、搜尋與匯出功能</p>
+    <h1>🔗 通用型 API 資料轉換器 V3.0</h1>
+    <div class="subtitle">TFDA DataAction / OpenData 優化版，支援智慧抓取、除錯、搜尋與匯出</div>
   </div>
 
   <div id="api-input-area">
@@ -339,9 +375,22 @@
         type="text"
         id="api-url"
         placeholder="請貼上 API 網址..."
-        value="https://data.food.gov.uk/food-alerts/id/alerts.json?_limit=10"
+        value="https://data.fda.gov.tw/opendata/export/120/json"
       />
       <button id="fetch-btn">🔍 抓取並分析</button>
+    </div>
+
+    <div class="quick-actions">
+      <button class="quick-btn" data-url="https://www.fda.gov.tw/DataAction?keyword=食品">TFDA DataAction：關鍵字「食品」</button>
+      <button class="quick-btn" data-url="https://www.fda.gov.tw/DataAction?startdate=2025/1/1&enddate=2025/12/31">TFDA DataAction：2025 年新聞</button>
+      <button class="quick-btn" data-url="https://data.fda.gov.tw/opendata/export/120/json">TFDA OpenData：本署新聞公告 JSON</button>
+    </div>
+
+    <div class="tip-box">
+      <strong>提示：</strong><br>
+      1. 若使用 <code>DataAction?startdate=2016/1/1</code> 這類大區間查詢，資料可能很多，建議加上 <code>enddate</code>。<br>
+      2. 若直接連線失敗，系統會自動改走代理；但公共代理有時可能逾時。<br>
+      3. 若 API 回傳不是標準陣列，系統會自動嘗試找出最像資料表的資料節點。
     </div>
 
     <div class="status-bar">
@@ -411,13 +460,14 @@
         currentViewData: [],
         headers: [],
         rowRenderLimit: 300,
-        fetchTimeoutMs: 15000
+        fetchTimeoutMs: 18000
       };
 
       const PROXY_LIST = [
-        { name: "Direct", prefix: "" },
-        { name: "CORSProxy.io", prefix: "https://corsproxy.io/?" },
-        { name: "AllOrigins", prefix: "https://api.allorigins.win/raw?url=" }
+        { name: "Direct", mode: "direct", prefix: "" },
+        { name: "AllOrigins-GET", mode: "allorigins-get", prefix: "https://api.allorigins.win/get?url=" },
+        { name: "AllOrigins-RAW", mode: "allorigins-raw", prefix: "https://api.allorigins.win/raw?url=" },
+        { name: "CORSProxy.io", mode: "raw", prefix: "https://corsproxy.io/?" }
       ];
 
       init();
@@ -428,28 +478,37 @@
           if (e.key === "Enter") startSmartFetch();
         });
 
-        els.tableSearchInput.addEventListener(
-          "input",
-          debounce(handleSearch, 250)
-        );
-
+        els.tableSearchInput.addEventListener("input", debounce(handleSearch, 250));
         els.exportExcelBtn.addEventListener("click", exportExcel);
         els.exportCsvBtn.addEventListener("click", exportCsv);
         els.exportJsonBtn.addEventListener("click", exportJson);
         els.resetBtn.addEventListener("click", resetApp);
 
+        document.querySelectorAll(".quick-btn").forEach(btn => {
+          btn.addEventListener("click", () => {
+            els.apiUrlInput.value = btn.dataset.url || "";
+          });
+        });
+
         updateExportButtons();
       }
 
       async function startSmartFetch() {
-        const url = els.apiUrlInput.value.trim();
+        let url = normalizeApiUrl(els.apiUrlInput.value);
+        els.apiUrlInput.value = url;
+
         if (!url) {
           showError("請輸入 API 網址。");
           return;
         }
 
+        const warnings = getUrlWarnings(url);
         resetViewBeforeFetch();
         setLoading(true);
+
+        if (warnings.length) {
+          showError("提醒：\n" + warnings.join("\n"));
+        }
 
         let success = false;
         let lastError = "";
@@ -458,11 +517,7 @@
           setStatus(`嘗試通道：${proxy.name}`, "#333", proxy.name);
 
           try {
-            const targetUrl = proxy.prefix
-              ? proxy.prefix + encodeURIComponent(url)
-              : url;
-
-            const rawData = await fetchJsonWithTimeout(targetUrl, state.fetchTimeoutMs);
+            const rawData = await fetchDataThroughProxy(url, proxy, state.fetchTimeoutMs);
             processSuccess(rawData, proxy.name);
             success = true;
             break;
@@ -478,7 +533,8 @@
             "連線失敗，請檢查以下可能原因：\n" +
             "1. API 網址錯誤\n" +
             "2. 目標伺服器拒絕跨來源存取（CORS）\n" +
-            "3. API 暫時無法連線或逾時\n\n" +
+            "3. API 暫時無法連線或逾時\n" +
+            "4. 公共代理服務目前不穩定\n\n" +
             (lastError ? `最後錯誤：${lastError}` : "")
           );
         }
@@ -486,12 +542,16 @@
         setLoading(false);
       }
 
-      async function fetchJsonWithTimeout(url, timeoutMs = 15000) {
+      async function fetchDataThroughProxy(originalUrl, proxy, timeoutMs = 18000) {
+        const targetUrl = proxy.prefix
+          ? proxy.prefix + encodeURIComponent(originalUrl)
+          : originalUrl;
+
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
 
         try {
-          const response = await fetch(url, {
+          const response = await fetch(targetUrl, {
             method: "GET",
             signal: controller.signal,
             headers: {
@@ -503,21 +563,38 @@
             throw new Error(`HTTP ${response.status} ${response.statusText}`);
           }
 
+          if (proxy.mode === "allorigins-get") {
+            const wrapped = await response.json();
+            if (!wrapped || typeof wrapped.contents !== "string") {
+              throw new Error("AllOrigins GET 回傳格式異常");
+            }
+
+            const text = wrapped.contents.trim();
+            if (!text) {
+              throw new Error("代理回傳內容為空");
+            }
+
+            try {
+              return JSON.parse(text);
+            } catch (err) {
+              const preview = text.slice(0, 250);
+              throw new Error(`AllOrigins GET 成功，但內容不是 JSON。預覽：${preview}${text.length > 250 ? "..." : ""}`);
+            }
+          }
+
           const text = await response.text();
           const trimmed = text.trim();
 
           if (!trimmed) {
-            throw new Error("API 回傳內容為空。");
+            throw new Error("回傳內容為空");
           }
 
           try {
             return JSON.parse(trimmed);
-          } catch (parseErr) {
+          } catch (err) {
+            // 某些 API 可能回傳 text/json 以外內容；這邊盡量給出預覽協助除錯
             const preview = trimmed.slice(0, 250);
-            throw new Error(
-              "回傳內容不是合法 JSON。\n" +
-              `內容預覽：${preview}${trimmed.length > 250 ? "..." : ""}`
-            );
+            throw new Error(`回傳內容不是合法 JSON。預覽：${preview}${trimmed.length > 250 ? "..." : ""}`);
           }
         } catch (err) {
           if (err.name === "AbortError") {
@@ -533,18 +610,18 @@
         setStatus(`連線成功`, "green", proxyName);
         showDebugInfo(rawData);
 
-        const dataArray = findBestDataArray(rawData);
+        const dataArray = normalizeToArray(rawData);
 
         if (!dataArray) {
           showError(
             "連線成功，但無法自動識別資料列表。\n" +
-            "請查看下方的「回應結構透視」，確認資料陣列位於哪個欄位。"
+            "請查看下方「回應結構透視」，確認資料陣列位於哪個欄位。"
           );
           return;
         }
 
         if (dataArray.length === 0) {
-          setStatus("連線成功，但查詢結果為 0 筆", "#e67e22", proxyName);
+          setStatus(`連線成功，但查詢結果為 0 筆`, "#e67e22", proxyName);
           state.originalData = [];
           state.currentViewData = [];
           state.headers = [];
@@ -553,10 +630,35 @@
           return;
         }
 
-        state.originalData = dataArray.map(item => flattenObject(item));
+        state.originalData = dataArray.map(item => {
+          if (isPlainObject(item)) return flattenObject(item);
+          return { value: item };
+        });
+
         state.currentViewData = [...state.originalData];
         initTable();
         els.mainContent.classList.remove("hidden");
+      }
+
+      function normalizeToArray(rawData) {
+        if (Array.isArray(rawData)) return rawData;
+
+        if (isPlainObject(rawData)) {
+          // 常見包裝 key
+          const preferredKeys = ["items", "results", "data", "records", "rows", "list"];
+          for (const key of preferredKeys) {
+            if (Array.isArray(rawData[key])) return rawData[key];
+          }
+
+          // 若整個物件本身就是單筆，可包成陣列方便顯示
+          const guessed = findBestDataArray(rawData);
+          if (guessed) return guessed;
+
+          const keys = Object.keys(rawData);
+          if (keys.length > 0) return [rawData];
+        }
+
+        return null;
       }
 
       function showDebugInfo(data) {
@@ -566,16 +668,18 @@
 
         if (Array.isArray(data)) {
           lines.push(`[Top Level] Array(length=${data.length})`);
-          if (data.length > 0 && isPlainObject(data[0])) {
-            lines.push(`Sample keys: ${Object.keys(data[0]).join(", ") || "(無)"}`);
+          if (data.length > 0) {
+            lines.push(`Sample type: ${typeof data[0]}`);
+            if (isPlainObject(data[0])) {
+              lines.push(`Sample keys: ${Object.keys(data[0]).join(", ") || "(無)"}`);
+            }
           }
         } else if (isPlainObject(data)) {
           const topKeys = Object.keys(data);
-          lines.push(`[Top Level] Object`);
+          lines.push("[Top Level] Object");
           lines.push(`Keys: ${topKeys.join(", ") || "(無)"}`);
 
-          const preferred = ["items", "results", "data", "records", "rows", "list"];
-          preferred.forEach(key => {
+          ["items", "results", "data", "records", "rows", "list"].forEach(key => {
             if (key in data) {
               const value = data[key];
               if (Array.isArray(value)) {
@@ -585,12 +689,22 @@
               }
             }
           });
+
+          if (looksLikeDataActionArrayWrapper(data)) {
+            lines.push("Hint: 看起來像單筆/包裝物件，將嘗試自動表格化。");
+          }
         } else {
           lines.push(`Primitive: ${String(data)}`);
         }
 
         els.debugBox.textContent = lines.join("\n");
         els.debugBox.classList.remove("hidden");
+      }
+
+      function looksLikeDataActionArrayWrapper(obj) {
+        if (!isPlainObject(obj)) return false;
+        const keys = Object.keys(obj);
+        return ["標題", "內容", "附檔連結", "發布日期"].some(k => keys.includes(k));
       }
 
       function findBestDataArray(root) {
@@ -688,7 +802,7 @@
         }
 
         const keySet = new Set();
-        state.originalData.slice(0, 200).forEach(row => {
+        state.originalData.slice(0, 300).forEach(row => {
           Object.keys(row).forEach(key => keySet.add(key));
         });
 
@@ -779,7 +893,6 @@
 
       function exportExcel() {
         if (!state.currentViewData.length) return;
-
         const ws = XLSX.utils.json_to_sheet(state.currentViewData);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Data");
@@ -930,6 +1043,54 @@
           clearTimeout(timer);
           timer = setTimeout(() => fn(...args), delay);
         };
+      }
+
+      function normalizeApiUrl(url) {
+        let normalized = (url || "").trim();
+        if (!normalized) return "";
+
+        // TFDA DataAction：優先升級為 HTTPS
+        normalized = normalized.replace(
+          /^http:\/\/www\.fda\.gov\.tw\/DataAction/i,
+          "https://www.fda.gov.tw/DataAction"
+        );
+
+        // 若使用者貼的是說明頁，不是 API 本體
+        normalized = normalized.replace(
+          /^https:\/\/www\.fda\.gov\.tw\/TC\/DataAction\.aspx$/i,
+          "https://www.fda.gov.tw/DataAction?keyword=食品"
+        );
+
+        return normalized;
+      }
+
+      function getUrlWarnings(url) {
+        const warnings = [];
+
+        try {
+          const u = new URL(url);
+
+          if (/fda\.gov\.tw$/i.test(u.hostname) && /\/DataAction$/i.test(u.pathname)) {
+            const startdate = u.searchParams.get("startdate");
+            const enddate = u.searchParams.get("enddate");
+
+            if (startdate && !enddate) {
+              warnings.push("此 TFDA DataAction 查詢只設定了 startdate，可能回傳大量資料（官方說明最多 1000 筆）。");
+            }
+
+            if (!startdate && !enddate && !u.searchParams.get("keyword")) {
+              warnings.push("此 TFDA DataAction 查詢沒有帶 keyword / startdate / enddate，建議至少提供一個條件。");
+            }
+          }
+
+          if (/data\.fda\.gov\.tw$/i.test(u.hostname) && /\/opendata\/export\/120\/json$/i.test(u.pathname)) {
+            // OpenData 新聞公告 JSON，通常可直接處理
+          }
+        } catch (err) {
+          warnings.push("網址格式可能不正確，請再確認。");
+        }
+
+        return warnings;
       }
     });
   </script>
