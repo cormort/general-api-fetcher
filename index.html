@@ -1,333 +1,937 @@
-
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>通用型 API 資料轉換器 V2.1 (除錯版)</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        .hidden { display: none !important; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 1400px; margin: 0 auto; padding: 20px; background-color: #f4f7f6; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>通用型 API 資料轉換器 V2.2（優化版）</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg: #f4f7f6;
+      --card: #ffffff;
+      --border: #e1e4e8;
+      --primary: #0366d6;
+      --primary-hover: #0255b3;
+      --success: #1f8b4c;
+      --warning: #e67e22;
+      --danger: #c0392b;
+      --text: #333;
+      --muted: #666;
+      --shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+      --radius: 10px;
+    }
 
-        .header-container { text-align: center; margin-bottom: 20px; }
-        h1 { color: #2c3e50; margin: 0; }
-        
-        #api-input-area { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: flex; flex-direction: column; gap: 15px; margin-bottom: 25px; border: 1px solid #e1e4e8; }
-        .input-group { display: flex; gap: 10px; width: 100%; }
-        #api-url { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 16px; outline: none; font-family: monospace; }
-        #api-url:focus { border-color: #3498db; }
-        
-        #fetch-btn { padding: 10px 30px; font-size: 16px; color: #fff; background-color: #0366d6; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; white-space: nowrap; }
-        #fetch-btn:hover { background-color: #0255b3; }
-        #fetch-btn:disabled { background-color: #ccc; cursor: wait; }
+    * { box-sizing: border-box; }
 
-        .status-bar { font-size: 0.9em; color: #666; display: flex; align-items: center; gap: 10px; background: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #eee;}
-        .proxy-badge { background: #3498db; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      color: var(--text);
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: var(--bg);
+    }
 
-        /* 錯誤與除錯區 */
-        #error-box { background: #fee; color: #c00; padding: 15px; border-radius: 5px; border: 1px solid #fcc; margin-top: 10px; white-space: pre-wrap; }
-        #debug-box { background: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; margin-top: 10px; font-family: monospace; overflow-x: auto; max-height: 300px; font-size: 0.9em; border: 1px solid #444; }
-        .debug-title { color: #ff79c6; font-weight: bold; margin-bottom: 5px; display: block; }
+    .hidden { display: none !important; }
 
-        /* 內容區塊 */
-        .content-box { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .table-actions-container { display: flex; flex-wrap: wrap; gap: 15px; margin: 20px 0; align-items: center; justify-content: space-between; }
-        
-        .search-box { display: flex; gap: 10px; flex: 1; min-width: 300px; }
-        #table-search-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
-        
-        .export-buttons-group button { padding: 8px 15px; font-size: 0.9em; color: #fff; border: none; border-radius: 4px; cursor: pointer; transition: opacity 0.2s; margin-right: 5px; }
-        .export-buttons-group button:hover { opacity: 0.9; }
-        .export-buttons-group button:disabled { background-color: #ccc !important; cursor: not-allowed; }
+    .header-container {
+      text-align: center;
+      margin-bottom: 20px;
+    }
 
-        #export-excel-btn { background-color: #217346; }
-        #export-csv-btn { background-color: #f39c12; }
-        #export-json-btn { background-color: #5b62f4; }
+    h1 {
+      color: #2c3e50;
+      margin: 0;
+    }
 
-        /* 表格 */
-        .table-wrapper { overflow-x: auto; border: 1px solid #eee; border-radius: 5px; max-height: 70vh; }
-        table { width: 100%; border-collapse: collapse; min-width: 800px; font-size: 14px; }
-        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #ddd; vertical-align: top; max-width: 300px; word-wrap: break-word; }
-        th { background-color: #f8f9fa; position: sticky; top: 0; z-index: 10; white-space: nowrap; }
-        
-        /* 讀取動畫 */
-        #loader { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
-        .spinner { border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
+    #api-input-area {
+      background: var(--card);
+      padding: 25px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 25px;
+      border: 1px solid var(--border);
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+    }
+
+    #api-url {
+      flex: 1;
+      padding: 12px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-size: 16px;
+      outline: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    #api-url:focus {
+      border-color: #3498db;
+    }
+
+    button {
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    #fetch-btn {
+      padding: 10px 30px;
+      font-size: 16px;
+      color: #fff;
+      background-color: var(--primary);
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    #fetch-btn:hover {
+      background-color: var(--primary-hover);
+    }
+
+    #fetch-btn:disabled {
+      background-color: #ccc;
+      cursor: wait;
+    }
+
+    .status-bar {
+      font-size: 0.95em;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #f8f9fa;
+      padding: 10px 12px;
+      border-radius: 6px;
+      border: 1px solid #eee;
+      flex-wrap: wrap;
+    }
+
+    .proxy-badge {
+      background: #3498db;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.85em;
+      font-weight: 600;
+    }
+
+    #error-box {
+      background: #fff2f2;
+      color: #b42318;
+      padding: 15px;
+      border-radius: 6px;
+      border: 1px solid #fecaca;
+      margin-top: 6px;
+      white-space: pre-wrap;
+    }
+
+    #debug-box {
+      background: #2d2d2d;
+      color: #f8f8f2;
+      padding: 15px;
+      border-radius: 6px;
+      margin-top: 6px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      overflow-x: auto;
+      max-height: 320px;
+      font-size: 0.9em;
+      border: 1px solid #444;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .content-box {
+      background-color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+      border: 1px solid #eee;
+    }
+
+    .content-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .count-badge {
+      font-size: 0.7em;
+      background: #eee;
+      padding: 2px 8px;
+      border-radius: 999px;
+      vertical-align: middle;
+    }
+
+    .secondary-btn {
+      padding: 6px 12px;
+      font-size: 0.85em;
+      cursor: pointer;
+      background: #f3f4f6;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+
+    .secondary-btn:hover {
+      background: #eaecef;
+    }
+
+    .table-actions-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      margin: 20px 0;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 10px;
+      flex: 1;
+      min-width: 280px;
+    }
+
+    #table-search-input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+
+    .export-buttons-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .export-buttons-group button {
+      padding: 8px 15px;
+      font-size: 0.9em;
+      color: #fff;
+      border-radius: 4px;
+    }
+
+    .export-buttons-group button:hover {
+      opacity: 0.92;
+    }
+
+    .export-buttons-group button:disabled {
+      background-color: #ccc !important;
+      cursor: not-allowed;
+      opacity: 1;
+    }
+
+    #export-excel-btn { background-color: #217346; }
+    #export-csv-btn   { background-color: #f39c12; }
+    #export-json-btn  { background-color: #5b62f4; }
+
+    .table-wrapper {
+      overflow: auto;
+      border: 1px solid #eee;
+      border-radius: 5px;
+      max-height: 70vh;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 800px;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+      vertical-align: top;
+      max-width: 300px;
+      word-wrap: break-word;
+      word-break: break-word;
+    }
+
+    th {
+      background-color: #f8f9fa;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      white-space: nowrap;
+    }
+
+    tr:hover td {
+      background: #fafafa;
+    }
+
+    .table-note {
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 0.9em;
+    }
+
+    #loader {
+      position: fixed;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.85);
+      z-index: 9999;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      backdrop-filter: blur(2px);
+    }
+
+    .spinner {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0%   { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 0.9em;
+    }
+
+    @media (max-width: 768px) {
+      .input-group {
+        flex-direction: column;
+      }
+
+      #fetch-btn {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
+  <div id="loader" class="hidden">
+    <div class="spinner"></div>
+    <p style="margin-top:10px; font-weight:bold;">資料偵探工作中...</p>
+  </div>
 
-    <div id="loader" class="hidden">
-        <div class="spinner"></div>
-        <p style="margin-top:10px; font-weight:bold;">資料偵探工作中...</p>
+  <div class="header-container">
+    <h1>🔗 通用型 API 資料轉換器 V2.2（優化版）</h1>
+    <p>內建 JSON 結構透視、智慧找陣列、搜尋與匯出功能</p>
+  </div>
+
+  <div id="api-input-area">
+    <div class="input-group">
+      <input
+        type="text"
+        id="api-url"
+        placeholder="請貼上 API 網址..."
+        value="https://data.food.gov.uk/food-alerts/id/alerts.json?_limit=10"
+      />
+      <button id="fetch-btn">🔍 抓取並分析</button>
     </div>
 
-    <div class="header-container">
-        <h1>🔗 通用型 API 資料轉換器 V2.1 (除錯版)</h1>
-        <p>內建 JSON 結構透視功能，找出資料隱藏在哪裡</p>
+    <div class="status-bar">
+      <span>連線狀態：</span>
+      <span id="connection-status">準備就緒</span>
+      <span id="status-badge" class="proxy-badge hidden"></span>
     </div>
-    
-    <div id="api-input-area">
-        <div class="input-group">
-            <input type="text" id="api-url" placeholder="請貼上 API 網址..." value="https://data.food.gov.uk/food-alerts/id/alerts.json?_limit=10">
-            <button id="fetch-btn">🔍 抓取並分析</button>
+
+    <div id="error-box" class="hidden"></div>
+    <div id="debug-box" class="hidden"></div>
+  </div>
+
+  <div id="main-content" class="hidden">
+    <div class="content-box">
+      <div class="content-header">
+        <h2 style="margin:0;">
+          資料預覽
+          <span id="data-count-badge" class="count-badge"></span>
+        </h2>
+        <button id="reset-btn" class="secondary-btn">重置</button>
+      </div>
+
+      <div class="table-actions-container">
+        <div class="search-box">
+          <input type="text" id="table-search-input" placeholder="在結果中搜尋..." />
         </div>
-        
-        <div class="status-bar">
-            <span>連線狀態:</span>
-            <span id="connection-status" style="color:#666;">準備就緒</span>
+        <div class="export-buttons-group">
+          <button id="export-excel-btn" disabled>匯出 Excel</button>
+          <button id="export-csv-btn" disabled>匯出 CSV</button>
+          <button id="export-json-btn" disabled>匯出 JSON</button>
         </div>
-        
-        <div id="error-box" class="hidden"></div>
-        <div id="debug-box" class="hidden"></div>
+      </div>
+
+      <div id="table-note" class="table-note hidden"></div>
+
+      <div class="table-wrapper">
+        <div id="table-container"></div>
+      </div>
     </div>
+  </div>
 
-    <div id="main-content" class="hidden">
-        <div class="content-box">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h2>資料預覽 <span id="data-count-badge" style="font-size:0.7em; background:#eee; padding:2px 6px; border-radius:10px;"></span></h2>
-                <button onclick="resetApp()" style="padding:5px 10px; font-size:0.8em; cursor:pointer;">重置</button>
-            </div>
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const $ = (id) => document.getElementById(id);
 
-            <div class="table-actions-container">
-                <div class="search-box">
-                    <input type="text" id="table-search-input" placeholder="在結果中搜尋...">
-                </div>
-                <div class="export-buttons-group">
-                    <button id="export-excel-btn">匯出 Excel</button>
-                    <button id="export-csv-btn">匯出 CSV</button>
-                    <button id="export-json-btn">匯出 JSON</button>
-                </div>
-            </div>
+      const els = {
+        loader: $("loader"),
+        mainContent: $("main-content"),
+        errorBox: $("error-box"),
+        debugBox: $("debug-box"),
+        tableContainer: $("table-container"),
+        apiUrlInput: $("api-url"),
+        statusText: $("connection-status"),
+        statusBadge: $("status-badge"),
+        fetchBtn: $("fetch-btn"),
+        resetBtn: $("reset-btn"),
+        tableSearchInput: $("table-search-input"),
+        exportExcelBtn: $("export-excel-btn"),
+        exportCsvBtn: $("export-csv-btn"),
+        exportJsonBtn: $("export-json-btn"),
+        dataCountBadge: $("data-count-badge"),
+        tableNote: $("table-note")
+      };
 
-            <div class="table-wrapper">
-                <div id="table-container"></div>
-            </div>
-        </div>
-    </div>
+      const state = {
+        originalData: [],
+        currentViewData: [],
+        headers: [],
+        rowRenderLimit: 300,
+        fetchTimeoutMs: 15000
+      };
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const loader = document.getElementById('loader');
-            const mainContent = document.getElementById('main-content');
-            const errorBox = document.getElementById('error-box');
-            const debugBox = document.getElementById('debug-box');
-            const tableContainer = document.getElementById('table-container');
-            const apiUrlInput = document.getElementById('api-url');
-            const statusText = document.getElementById('connection-status');
-            const fetchBtn = document.getElementById('fetch-btn');
-            
-            let originalData = [];
-            let currentViewData = [];
-            let headers = [];
+      const PROXY_LIST = [
+        { name: "Direct", prefix: "" },
+        { name: "CORSProxy.io", prefix: "https://corsproxy.io/?" },
+        { name: "AllOrigins", prefix: "https://api.allorigins.win/raw?url=" }
+      ];
 
-            // Proxy 列表
-            const PROXY_LIST = [
-                { name: "CORSProxy.io", prefix: "https://corsproxy.io/?" },
-                { name: "AllOrigins", prefix: "https://api.allorigins.win/raw?url=" },
-                { name: "Direct", prefix: "" }
-            ];
+      init();
 
-            fetchBtn.addEventListener('click', () => startSmartFetch());
-            apiUrlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') startSmartFetch(); });
-
-            async function startSmartFetch() {
-                let url = apiUrlInput.value.trim();
-                if (!url) return alert("請輸入網址");
-                
-                showLoader(true);
-                errorBox.classList.add('hidden');
-                debugBox.classList.add('hidden');
-                mainContent.classList.add('hidden');
-                fetchBtn.disabled = true;
-
-                let success = false;
-
-                for (let proxy of PROXY_LIST) {
-                    updateStatus(`嘗試通道: <span class="proxy-badge">${proxy.name}</span>`, "black");
-                    
-                    try {
-                        let targetUrl = proxy.prefix ? proxy.prefix + encodeURIComponent(url) : url;
-                        const response = await fetch(targetUrl);
-                        
-                        if (!response.ok) {
-                            console.warn(`${proxy.name} status: ${response.status}`);
-                            continue; 
-                        }
-
-                        // 嘗試解析 JSON
-                        const textData = await response.text();
-                        let rawData;
-                        try {
-                            rawData = JSON.parse(textData);
-                        } catch (e) {
-                            throw new Error("回傳的不是 JSON 格式 (可能是 HTML 錯誤頁面)");
-                        }
-                        
-                        // 成功！
-                        processSuccess(rawData, proxy.name);
-                        success = true;
-                        break; 
-
-                    } catch (e) {
-                        console.warn(`${proxy.name} error:`, e);
-                    }
-                }
-
-                if (!success) {
-                    updateStatus("所有通道失敗", "red");
-                    showError("連線失敗。請檢查網址是否正確，或目標伺服器拒絕連線。");
-                }
-                
-                showLoader(false);
-                fetchBtn.disabled = false;
-            }
-
-            function processSuccess(rawData, proxyName) {
-                updateStatus(`連線成功 (通道: ${proxyName})`, "green");
-                
-                // 顯示除錯資訊：讓使用者看到 API 回傳了什麼 Key
-                showDebugInfo(rawData);
-
-                // 尋找資料陣列
-                let dataArray = findDataArray(rawData);
-                
-                if (!dataArray) {
-                    showError("連線成功，但無法自動識別資料列表。\n請查看下方的「回應結構透視」以確認 API 回傳格式。");
-                    return;
-                }
-
-                if (dataArray.length === 0) {
-                    // 修正：空陣列不是錯誤，只是沒資料
-                    updateStatus(`連線成功，但查詢結果為 0 筆`, "#e67e22");
-                    originalData = [];
-                    initTable();
-                    mainContent.classList.remove('hidden');
-                    return;
-                }
-
-                // 扁平化
-                originalData = dataArray.map(item => flattenObject(item));
-                initTable();
-                mainContent.classList.remove('hidden');
-            }
-
-            function showDebugInfo(data) {
-                debugBox.classList.remove('hidden');
-                let debugText = "<span class='debug-title'>🕵️ 回應結構透視 (Top Level Keys):</span>";
-                
-                if (Array.isArray(data)) {
-                    debugText += `[Array] (Length: ${data.length})`;
-                    if(data.length > 0) debugText += `\nSample keys: ${Object.keys(data[0]).join(', ')}`;
-                } else if (typeof data === 'object') {
-                    debugText += JSON.stringify(Object.keys(data), null, 2);
-                    // 特別針對 FSA 顯示 items
-                    if(data.items) {
-                         debugText += `\n\nFound 'items': ${Array.isArray(data.items) ? `Array(${data.items.length})` : typeof data.items}`;
-                    }
-                } else {
-                    debugText += String(data);
-                }
-                debugBox.innerHTML = debugText;
-            }
-
-            function findDataArray(obj) {
-                if (Array.isArray(obj)) return obj;
-                // 常見的 API 包裝 Key
-                const keys = ['items', 'results', 'data', 'records', 'rows', 'list'];
-                for (let k of keys) {
-                    if (obj[k] && Array.isArray(obj[k])) return obj[k];
-                }
-                // 暴力搜尋第一個是陣列的 Key
-                for (let key in obj) {
-                    if (Array.isArray(obj[key])) return obj[key];
-                }
-                return null;
-            }
-
-            function flattenObject(obj, prefix = '', result = {}) {
-                for (const key in obj) {
-                    const newKey = prefix ? `${prefix}.${key}` : key;
-                    const value = obj[key];
-                    if (value && typeof value === 'object' && !Array.isArray(value)) {
-                        flattenObject(value, newKey, result);
-                    } else if (Array.isArray(value)) {
-                         result[newKey] = value.map(v => typeof v === 'object' ? JSON.stringify(v) : v).join("; ");
-                    } else {
-                        result[newKey] = value;
-                    }
-                }
-                return result;
-            }
-
-            function initTable() {
-                if (originalData.length === 0) {
-                    document.getElementById('data-count-badge').textContent = "0 筆";
-                    renderTable();
-                    return;
-                }
-                let keySet = new Set();
-                originalData.slice(0, 50).forEach(row => Object.keys(row).forEach(k => keySet.add(k)));
-                headers = Array.from(keySet).sort();
-                document.getElementById('data-count-badge').textContent = `${originalData.length} 筆`;
-                currentViewData = originalData;
-                renderTable();
-            }
-
-            function renderTable() {
-                tableContainer.innerHTML = "";
-                if (!currentViewData || currentViewData.length === 0) {
-                    tableContainer.innerHTML = "<div style='text-align:center; padding:40px; color:#888;'>📭 查無資料<br><small>請嘗試放寬搜尋條件</small></div>";
-                    return;
-                }
-
-                const table = document.createElement('table');
-                const thead = table.createTHead();
-                const tr = thead.insertRow();
-                headers.forEach(h => {
-                    let th = document.createElement('th');
-                    th.textContent = h;
-                    tr.appendChild(th);
-                });
-
-                const tbody = table.createTBody();
-                currentViewData.slice(0, 100).forEach(row => {
-                    let tr = tbody.insertRow();
-                    headers.forEach(h => {
-                        let td = tr.insertCell();
-                        let val = row[h] !== undefined ? String(row[h]) : "";
-                        if (val.length > 100) {
-                            td.title = val;
-                            val = val.substring(0, 100) + "...";
-                        }
-                        td.textContent = val;
-                    });
-                });
-                tableContainer.appendChild(table);
-            }
-
-            // 事件綁定
-            document.getElementById('table-search-input').addEventListener('input', (e) => {
-                const term = e.target.value.toLowerCase();
-                currentViewData = originalData.filter(row => Object.values(row).some(v => String(v).toLowerCase().includes(term)));
-                renderTable();
-            });
-            
-            document.getElementById('export-excel-btn').addEventListener('click', () => {
-                if(originalData.length===0) return;
-                const ws = XLSX.utils.json_to_sheet(currentViewData);
-                const wb = XLSX.utils.book_new();
-                XLSX.utils.book_append_sheet(wb, ws, "Data");
-                XLSX.writeFile(wb, `export_data.xlsx`);
-            });
-            
-            function updateStatus(html, color) { statusText.innerHTML = html; statusText.style.color = color; }
-            function showLoader(show) { show ? loader.classList.remove('hidden') : loader.classList.add('hidden'); }
-            function showError(msg) { errorBox.textContent = msg; errorBox.classList.remove('hidden'); }
-            window.resetApp = function() { location.reload(); }
+      function init() {
+        els.fetchBtn.addEventListener("click", startSmartFetch);
+        els.apiUrlInput.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") startSmartFetch();
         });
-    </script>
+
+        els.tableSearchInput.addEventListener(
+          "input",
+          debounce(handleSearch, 250)
+        );
+
+        els.exportExcelBtn.addEventListener("click", exportExcel);
+        els.exportCsvBtn.addEventListener("click", exportCsv);
+        els.exportJsonBtn.addEventListener("click", exportJson);
+        els.resetBtn.addEventListener("click", resetApp);
+
+        updateExportButtons();
+      }
+
+      async function startSmartFetch() {
+        const url = els.apiUrlInput.value.trim();
+        if (!url) {
+          showError("請輸入 API 網址。");
+          return;
+        }
+
+        resetViewBeforeFetch();
+        setLoading(true);
+
+        let success = false;
+        let lastError = "";
+
+        for (const proxy of PROXY_LIST) {
+          setStatus(`嘗試通道：${proxy.name}`, "#333", proxy.name);
+
+          try {
+            const targetUrl = proxy.prefix
+              ? proxy.prefix + encodeURIComponent(url)
+              : url;
+
+            const rawData = await fetchJsonWithTimeout(targetUrl, state.fetchTimeoutMs);
+            processSuccess(rawData, proxy.name);
+            success = true;
+            break;
+          } catch (err) {
+            console.warn(`[${proxy.name}]`, err);
+            lastError = `${proxy.name}：${err.message}`;
+          }
+        }
+
+        if (!success) {
+          setStatus("所有通道失敗", "red");
+          showError(
+            "連線失敗，請檢查以下可能原因：\n" +
+            "1. API 網址錯誤\n" +
+            "2. 目標伺服器拒絕跨來源存取（CORS）\n" +
+            "3. API 暫時無法連線或逾時\n\n" +
+            (lastError ? `最後錯誤：${lastError}` : "")
+          );
+        }
+
+        setLoading(false);
+      }
+
+      async function fetchJsonWithTimeout(url, timeoutMs = 15000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+        try {
+          const response = await fetch(url, {
+            method: "GET",
+            signal: controller.signal,
+            headers: {
+              "Accept": "application/json, text/plain, */*"
+            }
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status} ${response.statusText}`);
+          }
+
+          const text = await response.text();
+          const trimmed = text.trim();
+
+          if (!trimmed) {
+            throw new Error("API 回傳內容為空。");
+          }
+
+          try {
+            return JSON.parse(trimmed);
+          } catch (parseErr) {
+            const preview = trimmed.slice(0, 250);
+            throw new Error(
+              "回傳內容不是合法 JSON。\n" +
+              `內容預覽：${preview}${trimmed.length > 250 ? "..." : ""}`
+            );
+          }
+        } catch (err) {
+          if (err.name === "AbortError") {
+            throw new Error(`請求逾時（>${timeoutMs / 1000} 秒）`);
+          }
+          throw err;
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      function processSuccess(rawData, proxyName) {
+        setStatus(`連線成功`, "green", proxyName);
+        showDebugInfo(rawData);
+
+        const dataArray = findBestDataArray(rawData);
+
+        if (!dataArray) {
+          showError(
+            "連線成功，但無法自動識別資料列表。\n" +
+            "請查看下方的「回應結構透視」，確認資料陣列位於哪個欄位。"
+          );
+          return;
+        }
+
+        if (dataArray.length === 0) {
+          setStatus("連線成功，但查詢結果為 0 筆", "#e67e22", proxyName);
+          state.originalData = [];
+          state.currentViewData = [];
+          state.headers = [];
+          initTable();
+          els.mainContent.classList.remove("hidden");
+          return;
+        }
+
+        state.originalData = dataArray.map(item => flattenObject(item));
+        state.currentViewData = [...state.originalData];
+        initTable();
+        els.mainContent.classList.remove("hidden");
+      }
+
+      function showDebugInfo(data) {
+        const lines = [];
+        lines.push("🕵️ 回應結構透視");
+        lines.push("=".repeat(40));
+
+        if (Array.isArray(data)) {
+          lines.push(`[Top Level] Array(length=${data.length})`);
+          if (data.length > 0 && isPlainObject(data[0])) {
+            lines.push(`Sample keys: ${Object.keys(data[0]).join(", ") || "(無)"}`);
+          }
+        } else if (isPlainObject(data)) {
+          const topKeys = Object.keys(data);
+          lines.push(`[Top Level] Object`);
+          lines.push(`Keys: ${topKeys.join(", ") || "(無)"}`);
+
+          const preferred = ["items", "results", "data", "records", "rows", "list"];
+          preferred.forEach(key => {
+            if (key in data) {
+              const value = data[key];
+              if (Array.isArray(value)) {
+                lines.push(`- ${key}: Array(${value.length})`);
+              } else {
+                lines.push(`- ${key}: ${typeof value}`);
+              }
+            }
+          });
+        } else {
+          lines.push(`Primitive: ${String(data)}`);
+        }
+
+        els.debugBox.textContent = lines.join("\n");
+        els.debugBox.classList.remove("hidden");
+      }
+
+      function findBestDataArray(root) {
+        if (Array.isArray(root)) return root;
+
+        const preferredKeys = ["items", "results", "data", "records", "rows", "list"];
+        const candidates = [];
+        const seen = new WeakSet();
+
+        function scoreArray(arr, path) {
+          if (!Array.isArray(arr)) return -1;
+          let score = arr.length;
+
+          if (arr.length > 0 && arr.every(item => isPlainObject(item))) score += 1000;
+          else if (arr.length > 0 && arr.some(item => isPlainObject(item))) score += 500;
+
+          if (preferredKeys.some(k => path.endsWith("." + k) || path === k)) score += 300;
+          return score;
+        }
+
+        function walk(node, path = "", depth = 0) {
+          if (depth > 6 || node == null) return;
+
+          if (Array.isArray(node)) {
+            candidates.push({ path, value: node, score: scoreArray(node, path) });
+            node.slice(0, 5).forEach((item, index) => {
+              if (isPlainObject(item) || Array.isArray(item)) {
+                walk(item, `${path}[${index}]`, depth + 1);
+              }
+            });
+            return;
+          }
+
+          if (!isPlainObject(node)) return;
+          if (seen.has(node)) return;
+          seen.add(node);
+
+          for (const key of Object.keys(node)) {
+            walk(node[key], path ? `${path}.${key}` : key, depth + 1);
+          }
+        }
+
+        preferredKeys.forEach(key => {
+          if (root && Array.isArray(root[key])) {
+            candidates.push({ path: key, value: root[key], score: scoreArray(root[key], key) + 100 });
+          }
+        });
+
+        walk(root);
+
+        if (!candidates.length) return null;
+        candidates.sort((a, b) => b.score - a.score);
+        return candidates[0].value;
+      }
+
+      function flattenObject(obj, prefix = "", result = {}) {
+        if (!isPlainObject(obj)) return result;
+
+        for (const key of Object.keys(obj)) {
+          const newKey = prefix ? `${prefix}.${key}` : key;
+          const value = obj[key];
+
+          if (value == null) {
+            result[newKey] = "";
+          } else if (Array.isArray(value)) {
+            if (value.every(v => typeof v !== "object" || v === null)) {
+              result[newKey] = value.join(" | ");
+            } else {
+              result[newKey] = value.map(v => {
+                try {
+                  return JSON.stringify(v);
+                } catch {
+                  return String(v);
+                }
+              }).join(" | ");
+            }
+          } else if (isPlainObject(value)) {
+            flattenObject(value, newKey, result);
+          } else {
+            result[newKey] = value;
+          }
+        }
+
+        return result;
+      }
+
+      function initTable() {
+        if (state.originalData.length === 0) {
+          state.currentViewData = [];
+          state.headers = [];
+          els.dataCountBadge.textContent = "0 筆";
+          updateExportButtons();
+          renderTable();
+          return;
+        }
+
+        const keySet = new Set();
+        state.originalData.slice(0, 200).forEach(row => {
+          Object.keys(row).forEach(key => keySet.add(key));
+        });
+
+        state.headers = Array.from(keySet).sort();
+        els.dataCountBadge.textContent = `${state.originalData.length} 筆`;
+        updateExportButtons();
+        renderTable();
+      }
+
+      function renderTable() {
+        els.tableContainer.innerHTML = "";
+        els.tableNote.classList.add("hidden");
+        els.tableNote.textContent = "";
+
+        if (!state.currentViewData.length) {
+          els.tableContainer.innerHTML =
+            "<div style='text-align:center; padding:40px; color:#888;'>📭 查無資料<br><small>請嘗試放寬搜尋條件</small></div>";
+          return;
+        }
+
+        const table = document.createElement("table");
+        const thead = document.createElement("thead");
+        const headRow = document.createElement("tr");
+
+        state.headers.forEach(header => {
+          const th = document.createElement("th");
+          th.textContent = header;
+          headRow.appendChild(th);
+        });
+
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement("tbody");
+        const fragment = document.createDocumentFragment();
+
+        const rowsToRender = state.currentViewData.slice(0, state.rowRenderLimit);
+
+        rowsToRender.forEach(row => {
+          const tr = document.createElement("tr");
+
+          state.headers.forEach(header => {
+            const td = document.createElement("td");
+            let val = row[header] !== undefined ? String(row[header]) : "";
+
+            if (val.length > 180) {
+              td.title = val;
+              val = val.slice(0, 180) + "...";
+            }
+
+            td.textContent = val;
+            tr.appendChild(td);
+          });
+
+          fragment.appendChild(tr);
+        });
+
+        tbody.appendChild(fragment);
+        table.appendChild(tbody);
+        els.tableContainer.appendChild(table);
+
+        if (state.currentViewData.length > state.rowRenderLimit) {
+          els.tableNote.textContent =
+            `為了效能，畫面目前只顯示前 ${state.rowRenderLimit} 筆；匯出仍會包含目前篩選後的全部資料。`;
+          els.tableNote.classList.remove("hidden");
+        }
+      }
+
+      function handleSearch(event) {
+        const term = event.target.value.trim().toLowerCase();
+
+        if (!term) {
+          state.currentViewData = [...state.originalData];
+        } else {
+          state.currentViewData = state.originalData.filter(row =>
+            Object.values(row).some(value =>
+              String(value).toLowerCase().includes(term)
+            )
+          );
+        }
+
+        els.dataCountBadge.textContent =
+          `${state.currentViewData.length} / ${state.originalData.length} 筆`;
+
+        renderTable();
+        updateExportButtons();
+      }
+
+      function exportExcel() {
+        if (!state.currentViewData.length) return;
+
+        const ws = XLSX.utils.json_to_sheet(state.currentViewData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data");
+        XLSX.writeFile(wb, createFilename("xlsx"));
+      }
+
+      function exportCsv() {
+        if (!state.currentViewData.length) return;
+
+        const rows = [state.headers, ...state.currentViewData.map(row =>
+          state.headers.map(h => row[h] ?? "")
+        )];
+
+        const csv = rows.map(cols =>
+          cols.map(escapeCsvCell).join(",")
+        ).join("\r\n");
+
+        const bom = "\uFEFF";
+        downloadBlob(
+          new Blob([bom + csv], { type: "text/csv;charset=utf-8;" }),
+          createFilename("csv")
+        );
+      }
+
+      function exportJson() {
+        if (!state.currentViewData.length) return;
+
+        const json = JSON.stringify(state.currentViewData, null, 2);
+        downloadBlob(
+          new Blob([json], { type: "application/json;charset=utf-8;" }),
+          createFilename("json")
+        );
+      }
+
+      function escapeCsvCell(value) {
+        const str = String(value ?? "");
+        const escaped = str.replace(/"/g, '""');
+        return /[",\r\n]/.test(str) ? `"${escaped}"` : escaped;
+      }
+
+      function createFilename(ext) {
+        const now = new Date();
+        const ts = [
+          now.getFullYear(),
+          String(now.getMonth() + 1).padStart(2, "0"),
+          String(now.getDate()).padStart(2, "0"),
+          "_",
+          String(now.getHours()).padStart(2, "0"),
+          String(now.getMinutes()).padStart(2, "0"),
+          String(now.getSeconds()).padStart(2, "0")
+        ].join("");
+        return `api_export_${ts}.${ext}`;
+      }
+
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function updateExportButtons() {
+        const disabled = state.currentViewData.length === 0;
+        els.exportExcelBtn.disabled = disabled;
+        els.exportCsvBtn.disabled = disabled;
+        els.exportJsonBtn.disabled = disabled;
+      }
+
+      function resetViewBeforeFetch() {
+        hideError();
+        hideDebug();
+        els.mainContent.classList.add("hidden");
+        state.originalData = [];
+        state.currentViewData = [];
+        state.headers = [];
+        els.tableSearchInput.value = "";
+        els.dataCountBadge.textContent = "";
+        els.tableContainer.innerHTML = "";
+        els.tableNote.classList.add("hidden");
+        updateExportButtons();
+        els.fetchBtn.disabled = true;
+      }
+
+      function resetApp() {
+        els.apiUrlInput.value = "";
+        hideError();
+        hideDebug();
+        setStatus("準備就緒", "#666");
+        els.mainContent.classList.add("hidden");
+        state.originalData = [];
+        state.currentViewData = [];
+        state.headers = [];
+        els.tableSearchInput.value = "";
+        els.tableContainer.innerHTML = "";
+        els.dataCountBadge.textContent = "";
+        els.tableNote.classList.add("hidden");
+        updateExportButtons();
+      }
+
+      function setStatus(text, color = "#666", badgeText = "") {
+        els.statusText.textContent = text;
+        els.statusText.style.color = color;
+
+        if (badgeText) {
+          els.statusBadge.textContent = badgeText;
+          els.statusBadge.classList.remove("hidden");
+        } else {
+          els.statusBadge.textContent = "";
+          els.statusBadge.classList.add("hidden");
+        }
+      }
+
+      function setLoading(show) {
+        if (show) {
+          els.loader.classList.remove("hidden");
+        } else {
+          els.loader.classList.add("hidden");
+          els.fetchBtn.disabled = false;
+        }
+      }
+
+      function showError(message) {
+        els.errorBox.textContent = message;
+        els.errorBox.classList.remove("hidden");
+      }
+
+      function hideError() {
+        els.errorBox.textContent = "";
+        els.errorBox.classList.add("hidden");
+      }
+
+      function hideDebug() {
+        els.debugBox.textContent = "";
+        els.debugBox.classList.add("hidden");
+      }
+
+      function isPlainObject(value) {
+        return Object.prototype.toString.call(value) === "[object Object]";
+      }
+
+      function debounce(fn, delay = 250) {
+        let timer = null;
+        return (...args) => {
+          clearTimeout(timer);
+          timer = setTimeout(() => fn(...args), delay);
+        };
+      }
+    });
+  </script>
 </body>
 </html>
