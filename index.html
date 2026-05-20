@@ -4,7 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>通用型 API 資料轉換器 V3.0（TFDA優化版）</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
+    integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"></script>
   <style>
     :root {
       --bg: #f4f7f6;
@@ -164,6 +168,16 @@
       border-radius: 8px;
       border: 1px solid #fecaca;
       white-space: pre-wrap;
+    }
+
+    #warning-box {
+      background: #fff8e1;
+      color: #7a5a00;
+      padding: 12px 14px;
+      border-radius: 8px;
+      border: 1px solid #ffe0a3;
+      white-space: pre-wrap;
+      font-size: 0.95em;
     }
 
     #debug-box {
@@ -359,8 +373,8 @@
   </style>
 </head>
 <body>
-  <div id="loader" class="hidden">
-    <div class="spinner"></div>
+  <div id="loader" class="hidden" role="status" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
     <p style="margin-top:10px; font-weight:bold;">資料偵探工作中...</p>
   </div>
 
@@ -375,7 +389,7 @@
         type="text"
         id="api-url"
         placeholder="請貼上 API 網址..."
-        value="https://data.fda.gov.tw/opendata/export/120/json"
+        value="https://www.fda.gov.tw/DataAction?keyword=食品&startdate=2025/1/1&enddate=2025/12/31"
       />
       <button id="fetch-btn">🔍 抓取並分析</button>
     </div>
@@ -383,7 +397,7 @@
     <div class="quick-actions">
       <button class="quick-btn" data-url="https://www.fda.gov.tw/DataAction?keyword=食品">TFDA DataAction：關鍵字「食品」</button>
       <button class="quick-btn" data-url="https://www.fda.gov.tw/DataAction?startdate=2025/1/1&enddate=2025/12/31">TFDA DataAction：2025 年新聞</button>
-      <button class="quick-btn" data-url="https://data.fda.gov.tw/opendata/export/120/json">TFDA OpenData：本署新聞公告 JSON</button>
+      <button class="quick-btn" data-url="https://www.fda.gov.tw/DataAction?keyword=藥品&startdate=2025/1/1&enddate=2025/12/31">TFDA DataAction：2025 年「藥品」</button>
     </div>
 
     <div class="tip-box">
@@ -399,7 +413,8 @@
       <span id="status-badge" class="proxy-badge hidden"></span>
     </div>
 
-    <div id="error-box" class="hidden"></div>
+    <div id="warning-box" class="hidden" role="status" aria-live="polite"></div>
+    <div id="error-box" class="hidden" role="alert" aria-live="assertive"></div>
     <div id="debug-box" class="hidden"></div>
   </div>
 
@@ -439,6 +454,7 @@
       const els = {
         loader: $("loader"),
         mainContent: $("main-content"),
+        warningBox: $("warning-box"),
         errorBox: $("error-box"),
         debugBox: $("debug-box"),
         tableContainer: $("table-container"),
@@ -455,19 +471,26 @@
         tableNote: $("table-note")
       };
 
+      const PREFERRED_ARRAY_KEYS = ["items", "results", "data", "records", "rows", "list"];
+      const ROW_RENDER_LIMIT = 300;
+      const FETCH_TIMEOUT_MS = 18000;
+      const CELL_TRUNCATE_LEN = 180;
+      const PREVIEW_LEN = 250;
+      const WALK_DEPTH_LIMIT = 6;
+      const WALK_SAMPLE_SIZE = 5;
+      const SEARCH_DEBOUNCE_MS = 250;
+      const STATUS_COLOR = { ok: "green", warn: "#e67e22", err: "red", muted: "#666", info: "#333" };
+
       const state = {
         originalData: [],
         currentViewData: [],
-        headers: [],
-        rowRenderLimit: 300,
-        fetchTimeoutMs: 18000
+        headers: []
       };
 
       const PROXY_LIST = [
-        { name: "Direct", mode: "direct", prefix: "" },
-        { name: "AllOrigins-GET", mode: "allorigins-get", prefix: "https://api.allorigins.win/get?url=" },
-        { name: "AllOrigins-RAW", mode: "allorigins-raw", prefix: "https://api.allorigins.win/raw?url=" },
-        { name: "CORSProxy.io", mode: "raw", prefix: "https://corsproxy.io/?" }
+        { name: "Direct", prefix: "" },
+        { name: "AllOrigins-RAW", prefix: "https://api.allorigins.win/raw?url=" },
+        { name: "AllOrigins-GET", prefix: "https://api.allorigins.win/get?url=", wrapped: true }
       ];
 
       init();
@@ -478,7 +501,7 @@
           if (e.key === "Enter") startSmartFetch();
         });
 
-        els.tableSearchInput.addEventListener("input", debounce(handleSearch, 250));
+        els.tableSearchInput.addEventListener("input", debounce(handleSearch, SEARCH_DEBOUNCE_MS));
         els.exportExcelBtn.addEventListener("click", exportExcel);
         els.exportCsvBtn.addEventListener("click", exportCsv);
         els.exportJsonBtn.addEventListener("click", exportJson);
@@ -487,6 +510,7 @@
         document.querySelectorAll(".quick-btn").forEach(btn => {
           btn.addEventListener("click", () => {
             els.apiUrlInput.value = btn.dataset.url || "";
+            startSmartFetch();
           });
         });
 
@@ -507,42 +531,42 @@
         setLoading(true);
 
         if (warnings.length) {
-          showError("提醒：\n" + warnings.join("\n"));
+          showWarning("提醒：\n" + warnings.join("\n"));
         }
 
         let success = false;
-        let lastError = "";
+        const errors = [];
 
         for (const proxy of PROXY_LIST) {
-          setStatus(`嘗試通道：${proxy.name}`, "#333", proxy.name);
+          setStatus(`嘗試通道：${proxy.name}`, STATUS_COLOR.info, proxy.name);
 
           try {
-            const rawData = await fetchDataThroughProxy(url, proxy, state.fetchTimeoutMs);
+            const rawData = await fetchDataThroughProxy(url, proxy, FETCH_TIMEOUT_MS);
             processSuccess(rawData, proxy.name);
             success = true;
             break;
           } catch (err) {
             console.warn(`[${proxy.name}]`, err);
-            lastError = `${proxy.name}：${err.message}`;
+            errors.push(`${proxy.name}：${err.message}`);
           }
         }
 
         if (!success) {
-          setStatus("所有通道失敗", "red");
+          setStatus("所有通道失敗", STATUS_COLOR.err);
           showError(
             "連線失敗，請檢查以下可能原因：\n" +
-            "1. API 網址錯誤\n" +
+            "1. API 網址錯誤或端點已下架\n" +
             "2. 目標伺服器拒絕跨來源存取（CORS）\n" +
             "3. API 暫時無法連線或逾時\n" +
             "4. 公共代理服務目前不穩定\n\n" +
-            (lastError ? `最後錯誤：${lastError}` : "")
+            "各通道錯誤：\n  - " + errors.join("\n  - ")
           );
         }
 
         setLoading(false);
       }
 
-      async function fetchDataThroughProxy(originalUrl, proxy, timeoutMs = 18000) {
+      async function fetchDataThroughProxy(originalUrl, proxy, timeoutMs = FETCH_TIMEOUT_MS) {
         const targetUrl = proxy.prefix
           ? proxy.prefix + encodeURIComponent(originalUrl)
           : originalUrl;
@@ -554,47 +578,34 @@
           const response = await fetch(targetUrl, {
             method: "GET",
             signal: controller.signal,
-            headers: {
-              "Accept": "application/json, text/plain, */*"
-            }
+            headers: { "Accept": "application/json, text/plain, */*" }
           });
 
           if (!response.ok) {
             throw new Error(`HTTP ${response.status} ${response.statusText}`);
           }
 
-          if (proxy.mode === "allorigins-get") {
-            const wrapped = await response.json();
-            if (!wrapped || typeof wrapped.contents !== "string") {
+          let payloadText;
+          if (proxy.wrapped) {
+            const envelope = await response.json();
+            if (!envelope || typeof envelope.contents !== "string") {
               throw new Error("AllOrigins GET 回傳格式異常");
             }
-
-            const text = wrapped.contents.trim();
-            if (!text) {
-              throw new Error("代理回傳內容為空");
-            }
-
-            try {
-              return JSON.parse(text);
-            } catch (err) {
-              const preview = text.slice(0, 250);
-              throw new Error(`AllOrigins GET 成功，但內容不是 JSON。預覽：${preview}${text.length > 250 ? "..." : ""}`);
-            }
+            payloadText = envelope.contents.trim();
+          } else {
+            payloadText = (await response.text()).trim();
           }
 
-          const text = await response.text();
-          const trimmed = text.trim();
-
-          if (!trimmed) {
+          if (!payloadText) {
             throw new Error("回傳內容為空");
           }
 
           try {
-            return JSON.parse(trimmed);
+            return JSON.parse(payloadText);
           } catch (err) {
-            // 某些 API 可能回傳 text/json 以外內容；這邊盡量給出預覽協助除錯
-            const preview = trimmed.slice(0, 250);
-            throw new Error(`回傳內容不是合法 JSON。預覽：${preview}${trimmed.length > 250 ? "..." : ""}`);
+            const preview = payloadText.slice(0, PREVIEW_LEN);
+            const ellipsis = payloadText.length > PREVIEW_LEN ? "..." : "";
+            throw new Error(`回傳內容不是合法 JSON。預覽：${preview}${ellipsis}`);
           }
         } catch (err) {
           if (err.name === "AbortError") {
@@ -607,12 +618,12 @@
       }
 
       function processSuccess(rawData, proxyName) {
-        setStatus(`連線成功`, "green", proxyName);
         showDebugInfo(rawData);
 
         const dataArray = normalizeToArray(rawData);
 
         if (!dataArray) {
+          setStatus("連線成功，但無法識別資料列表", STATUS_COLOR.warn, proxyName);
           showError(
             "連線成功，但無法自動識別資料列表。\n" +
             "請查看下方「回應結構透視」，確認資料陣列位於哪個欄位。"
@@ -621,7 +632,7 @@
         }
 
         if (dataArray.length === 0) {
-          setStatus(`連線成功，但查詢結果為 0 筆`, "#e67e22", proxyName);
+          setStatus("連線成功，但查詢結果為 0 筆", STATUS_COLOR.warn, proxyName);
           state.originalData = [];
           state.currentViewData = [];
           state.headers = [];
@@ -630,10 +641,10 @@
           return;
         }
 
-        state.originalData = dataArray.map(item => {
-          if (isPlainObject(item)) return flattenObject(item);
-          return { value: item };
-        });
+        setStatus("連線成功", STATUS_COLOR.ok, proxyName);
+        state.originalData = dataArray.map(item =>
+          isPlainObject(item) ? flattenObject(item) : { value: item }
+        );
 
         state.currentViewData = [...state.originalData];
         initTable();
@@ -642,23 +653,13 @@
 
       function normalizeToArray(rawData) {
         if (Array.isArray(rawData)) return rawData;
+        if (!isPlainObject(rawData)) return null;
 
-        if (isPlainObject(rawData)) {
-          // 常見包裝 key
-          const preferredKeys = ["items", "results", "data", "records", "rows", "list"];
-          for (const key of preferredKeys) {
-            if (Array.isArray(rawData[key])) return rawData[key];
-          }
+        const guessed = findBestDataArray(rawData);
+        if (guessed) return guessed;
 
-          // 若整個物件本身就是單筆，可包成陣列方便顯示
-          const guessed = findBestDataArray(rawData);
-          if (guessed) return guessed;
-
-          const keys = Object.keys(rawData);
-          if (keys.length > 0) return [rawData];
-        }
-
-        return null;
+        // 整個物件本身就是單筆，包成陣列方便顯示
+        return Object.keys(rawData).length > 0 ? [rawData] : null;
       }
 
       function showDebugInfo(data) {
@@ -679,7 +680,7 @@
           lines.push("[Top Level] Object");
           lines.push(`Keys: ${topKeys.join(", ") || "(無)"}`);
 
-          ["items", "results", "data", "records", "rows", "list"].forEach(key => {
+          PREFERRED_ARRAY_KEYS.forEach(key => {
             if (key in data) {
               const value = data[key];
               if (Array.isArray(value)) {
@@ -710,7 +711,6 @@
       function findBestDataArray(root) {
         if (Array.isArray(root)) return root;
 
-        const preferredKeys = ["items", "results", "data", "records", "rows", "list"];
         const candidates = [];
         const seen = new WeakSet();
 
@@ -721,16 +721,16 @@
           if (arr.length > 0 && arr.every(item => isPlainObject(item))) score += 1000;
           else if (arr.length > 0 && arr.some(item => isPlainObject(item))) score += 500;
 
-          if (preferredKeys.some(k => path.endsWith("." + k) || path === k)) score += 300;
+          if (PREFERRED_ARRAY_KEYS.some(k => path.endsWith("." + k) || path === k)) score += 300;
           return score;
         }
 
         function walk(node, path = "", depth = 0) {
-          if (depth > 6 || node == null) return;
+          if (depth > WALK_DEPTH_LIMIT || node == null) return;
 
           if (Array.isArray(node)) {
             candidates.push({ path, value: node, score: scoreArray(node, path) });
-            node.slice(0, 5).forEach((item, index) => {
+            node.slice(0, WALK_SAMPLE_SIZE).forEach((item, index) => {
               if (isPlainObject(item) || Array.isArray(item)) {
                 walk(item, `${path}[${index}]`, depth + 1);
               }
@@ -738,20 +738,13 @@
             return;
           }
 
-          if (!isPlainObject(node)) return;
-          if (seen.has(node)) return;
+          if (!isPlainObject(node) || seen.has(node)) return;
           seen.add(node);
 
           for (const key of Object.keys(node)) {
             walk(node[key], path ? `${path}.${key}` : key, depth + 1);
           }
         }
-
-        preferredKeys.forEach(key => {
-          if (root && Array.isArray(root[key])) {
-            candidates.push({ path: key, value: root[key], score: scoreArray(root[key], key) + 100 });
-          }
-        });
 
         walk(root);
 
@@ -760,8 +753,13 @@
         return candidates[0].value;
       }
 
-      function flattenObject(obj, prefix = "", result = {}) {
+      function flattenObject(obj, prefix = "", result = {}, seen = new WeakSet()) {
         if (!isPlainObject(obj)) return result;
+        if (seen.has(obj)) {
+          result[prefix || "(root)"] = "[循環引用]";
+          return result;
+        }
+        seen.add(obj);
 
         for (const key of Object.keys(obj)) {
           const newKey = prefix ? `${prefix}.${key}` : key;
@@ -782,7 +780,7 @@
               }).join(" | ");
             }
           } else if (isPlainObject(value)) {
-            flattenObject(value, newKey, result);
+            flattenObject(value, newKey, result, seen);
           } else {
             result[newKey] = value;
           }
@@ -801,12 +799,13 @@
           return;
         }
 
+        // Set 保留插入順序：以首次出現的欄位順序為準，並掃描全部資料避免漏欄
         const keySet = new Set();
-        state.originalData.slice(0, 300).forEach(row => {
-          Object.keys(row).forEach(key => keySet.add(key));
-        });
+        for (const row of state.originalData) {
+          for (const key of Object.keys(row)) keySet.add(key);
+        }
 
-        state.headers = Array.from(keySet).sort();
+        state.headers = Array.from(keySet);
         els.dataCountBadge.textContent = `${state.originalData.length} 筆`;
         updateExportButtons();
         renderTable();
@@ -839,7 +838,7 @@
         const tbody = document.createElement("tbody");
         const fragment = document.createDocumentFragment();
 
-        const rowsToRender = state.currentViewData.slice(0, state.rowRenderLimit);
+        const rowsToRender = state.currentViewData.slice(0, ROW_RENDER_LIMIT);
 
         rowsToRender.forEach(row => {
           const tr = document.createElement("tr");
@@ -848,9 +847,9 @@
             const td = document.createElement("td");
             let val = row[header] !== undefined ? String(row[header]) : "";
 
-            if (val.length > 180) {
+            if (val.length > CELL_TRUNCATE_LEN) {
               td.title = val;
-              val = val.slice(0, 180) + "...";
+              val = val.slice(0, CELL_TRUNCATE_LEN) + "...";
             }
 
             td.textContent = val;
@@ -864,9 +863,9 @@
         table.appendChild(tbody);
         els.tableContainer.appendChild(table);
 
-        if (state.currentViewData.length > state.rowRenderLimit) {
+        if (state.currentViewData.length > ROW_RENDER_LIMIT) {
           els.tableNote.textContent =
-            `為了效能，畫面目前只顯示前 ${state.rowRenderLimit} 筆；匯出仍會包含目前篩選後的全部資料。`;
+            `為了效能，畫面目前只顯示前 ${ROW_RENDER_LIMIT} 筆；匯出仍會包含目前篩選後的全部資料。`;
           els.tableNote.classList.remove("hidden");
         }
       }
@@ -965,35 +964,30 @@
         els.exportJsonBtn.disabled = disabled;
       }
 
-      function resetViewBeforeFetch() {
+      function clearDataAndView() {
         hideError();
+        hideWarning();
         hideDebug();
         els.mainContent.classList.add("hidden");
         state.originalData = [];
         state.currentViewData = [];
         state.headers = [];
         els.tableSearchInput.value = "";
-        els.dataCountBadge.textContent = "";
         els.tableContainer.innerHTML = "";
+        els.dataCountBadge.textContent = "";
         els.tableNote.classList.add("hidden");
         updateExportButtons();
+      }
+
+      function resetViewBeforeFetch() {
+        clearDataAndView();
         els.fetchBtn.disabled = true;
       }
 
       function resetApp() {
         els.apiUrlInput.value = "";
-        hideError();
-        hideDebug();
-        setStatus("準備就緒", "#666");
-        els.mainContent.classList.add("hidden");
-        state.originalData = [];
-        state.currentViewData = [];
-        state.headers = [];
-        els.tableSearchInput.value = "";
-        els.tableContainer.innerHTML = "";
-        els.dataCountBadge.textContent = "";
-        els.tableNote.classList.add("hidden");
-        updateExportButtons();
+        clearDataAndView();
+        setStatus("準備就緒", STATUS_COLOR.muted);
       }
 
       function setStatus(text, color = "#666", badgeText = "") {
@@ -1026,6 +1020,16 @@
       function hideError() {
         els.errorBox.textContent = "";
         els.errorBox.classList.add("hidden");
+      }
+
+      function showWarning(message) {
+        els.warningBox.textContent = message;
+        els.warningBox.classList.remove("hidden");
+      }
+
+      function hideWarning() {
+        els.warningBox.textContent = "";
+        els.warningBox.classList.add("hidden");
       }
 
       function hideDebug() {
